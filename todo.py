@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import json
 import sys
+from datetime import date, datetime
 from pathlib import Path
 
 DATA_FILE = Path.home() / ".todo_tasks.json"
+DATE_FORMAT = "%Y-%m-%d"
 
 
 def load_tasks():
@@ -16,12 +18,57 @@ def save_tasks(tasks):
     DATA_FILE.write_text(json.dumps(tasks, ensure_ascii=False, indent=2))
 
 
-def add_task(title):
+def parse_due(due_str):
+    try:
+        datetime.strptime(due_str, DATE_FORMAT)
+        return due_str
+    except ValueError:
+        print(f"エラー: 期限は YYYY-MM-DD 形式で入力してください。（例: {date.today()}）")
+        sys.exit(1)
+
+
+def format_due(due_str):
+    if not due_str:
+        return "期限なし"
+    today = date.today()
+    due = datetime.strptime(due_str, DATE_FORMAT).date()
+    diff = (due - today).days
+    if diff < 0:
+        suffix = f"（{abs(diff)}日超過）"
+    elif diff == 0:
+        suffix = "（今日）"
+    elif diff <= 3:
+        suffix = f"（あと{diff}日）"
+    else:
+        suffix = ""
+    return f"{due_str}{suffix}"
+
+
+def add_task(args):
+    # 使い方: add <タスク名> [--due YYYY-MM-DD]
+    due = None
+    if "--due" in args:
+        idx = args.index("--due")
+        if idx + 1 >= len(args):
+            print("エラー: --due の後に日付を指定してください。")
+            sys.exit(1)
+        due = parse_due(args[idx + 1])
+        title_parts = args[:idx] + args[idx + 2:]
+    else:
+        title_parts = args
+
+    if not title_parts:
+        print("エラー: タスク名を指定してください。")
+        sys.exit(1)
+
+    title = " ".join(title_parts)
     tasks = load_tasks()
     task_id = max((t["id"] for t in tasks), default=0) + 1
-    tasks.append({"id": task_id, "title": title})
+    tasks.append({"id": task_id, "title": title, "due": due})
     save_tasks(tasks)
-    print(f"追加しました: [{task_id}] {title}")
+
+    due_label = f"  期限: {due}" if due else ""
+    print(f"追加しました: [{task_id}] {title}{due_label}")
 
 
 def list_tasks():
@@ -30,7 +77,8 @@ def list_tasks():
         print("タスクはありません。")
         return
     for t in tasks:
-        print(f"[{t['id']}] {t['title']}")
+        due_label = format_due(t.get("due"))
+        print(f"[{t['id']}] {t['title']}  （{due_label}）")
 
 
 def delete_task(task_id):
@@ -44,10 +92,11 @@ def delete_task(task_id):
 
 
 def print_usage():
+    today = date.today()
     print("使い方:")
-    print("  python todo.py add <タスク名>   タスクを追加")
-    print("  python todo.py list             タスク一覧を表示")
-    print("  python todo.py delete <ID>      タスクを削除")
+    print(f"  python todo.py add <タスク名> [--due YYYY-MM-DD]   タスクを追加（例: --due {today}）")
+    print("  python todo.py list                                  タスク一覧を表示")
+    print("  python todo.py delete <ID>                           タスクを削除")
 
 
 def main():
@@ -61,7 +110,7 @@ def main():
         if len(sys.argv) < 3:
             print("エラー: タスク名を指定してください。")
             sys.exit(1)
-        add_task(" ".join(sys.argv[2:]))
+        add_task(sys.argv[2:])
     elif command == "list":
         list_tasks()
     elif command == "delete":
