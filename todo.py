@@ -6,6 +6,8 @@ from pathlib import Path
 
 DATA_FILE = Path.home() / ".todo_tasks.json"
 DATE_FORMAT = "%Y-%m-%d"
+RED = "\033[31m"
+RESET = "\033[0m"
 
 
 def load_tasks():
@@ -71,14 +73,45 @@ def add_task(args):
     print(f"追加しました: [{task_id}] {title}{due_label}")
 
 
+def is_overdue(due_str):
+    if not due_str:
+        return False
+    return datetime.strptime(due_str, DATE_FORMAT).date() < date.today()
+
+
+def is_due_today_or_overdue(due_str):
+    if not due_str:
+        return False
+    return datetime.strptime(due_str, DATE_FORMAT).date() <= date.today()
+
+
+def print_task(t):
+    due_label = format_due(t.get("due"))
+    line = f"[{t['id']}] {t['title']}  （{due_label}）"
+    if is_overdue(t.get("due")):
+        print(f"{RED}{line}{RESET}")
+    else:
+        print(line)
+
+
 def list_tasks():
     tasks = load_tasks()
     if not tasks:
         print("タスクはありません。")
         return
     for t in tasks:
-        due_label = format_due(t.get("due"))
-        print(f"[{t['id']}] {t['title']}  （{due_label}）")
+        print_task(t)
+
+
+def list_urgent_tasks():
+    tasks = load_tasks()
+    urgent = [t for t in tasks if is_due_today_or_overdue(t.get("due"))]
+    if not urgent:
+        print("今日までの期限のタスクはありません。")
+        return
+    print(f"今日までの期限のタスク（{len(urgent)}件）:")
+    for t in urgent:
+        print_task(t)
 
 
 def delete_task(task_id):
@@ -96,6 +129,7 @@ def print_usage():
     print("使い方:")
     print(f"  python todo.py add <タスク名> [--due YYYY-MM-DD]   タスクを追加（例: --due {today}）")
     print("  python todo.py list                                  タスク一覧を表示")
+    print("  python todo.py urgent                                今日までの期限のタスクを表示")
     print("  python todo.py delete <ID>                           タスクを削除")
 
 
@@ -113,6 +147,8 @@ def main():
         add_task(sys.argv[2:])
     elif command == "list":
         list_tasks()
+    elif command == "urgent":
+        list_urgent_tasks()
     elif command == "delete":
         if len(sys.argv) < 3:
             print("エラー: IDを指定してください。")
